@@ -1,0 +1,11 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+package vga_disp_settings is
+  constant OP_MOD   : std_logic_vector(2 downto 0) := "010";
+  constant OP_PLUS  : std_logic_vector(2 downto 0) := "000";
+  constant OP_MINUS : std_logic_vector(2 downto 0) := "111";
+  constant OP_TIMES : std_logic_vector(2 downto 0) := "111";
+  constant OP_SQRT  : std_logic_vector(2 downto 0) := "111";
+end vga_disp_settings;

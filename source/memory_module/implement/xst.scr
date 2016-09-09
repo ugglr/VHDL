@@ -1,0 +1,13 @@
+run
+-ifmt VHDL
+-ent memory_module_exdes
+-p xc3s200-ft256-4
+-ifn xst.prj
+-write_timing_constraints No
+-iobuf YES
+-max_fanout 100
+-ofn memory_module_exdes 
+-ofmt NGC
+-bus_delimiter ()
+-hierarchy_separator /
+-case Maintain

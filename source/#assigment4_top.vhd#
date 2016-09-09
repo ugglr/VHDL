@@ -1,0 +1,164 @@
+-------------------------------------------------------------------------------
+-- Title      : Assigment 4 & 5 Top -the calculator
+-- Project    : 
+-------------------------------------------------------------------------------
+-- File       : assigment4_top.vhd
+-- Author     : 
+-- Company    : 
+-- Created    : 2013-10-08
+-- Last update: 2013-10-08
+-- Platform   : 
+-- Standard   : VHDL'87
+-------------------------------------------------------------------------------
+-- Description: The Calculator
+-------------------------------------------------------------------------------
+-- Copyright (c) 2013 
+-------------------------------------------------------------------------------
+-- Revisions  :
+-- Date        Version  Author  Description
+-- 2013-10-08  1.0      svd04   Created
+-------------------------------------------------------------------------------
+
+library ieee;
+use ieee.numeric_std.all;
+use ieee.std_logic_1164.all;
+
+entity assigment4_top is
+  port (
+    clk     : in  std_logic;
+    rst     : in  std_logic;
+    kb_data : in  std_logic;
+    kb_clk  : in  std_logic;
+    seg_en  : out unsigned(7 downto 0);  -- 7-Segment enable
+    seg_num : out unsigned(7 downto 0);  -- 7-Segemnt display
+    leds    : out unsigned(7 downto 0);  -- LEDs
+    vga_rgb : out std_logic_vector(2 downto 0);
+    vga_vs  : out std_logic;
+    vga_hs  : out std_logic
+    );
+end assigment4_top;
+
+architecture assigment4_top_arch of assigment4_top is
+  constant NUM_DIGITS : integer := 3;  -- we operate with 3 digits at input and display
+
+  component sync_keyboard
+    port (
+      clk          : in  std_logic;
+      kb_clk       : in  std_logic;
+      kb_data      : in  std_logic;
+      kb_clk_sync  : out std_logic;
+      kb_data_sync : out std_logic);
+  end component;
+
+  component edge_detector
+    port (
+      clk         : in  std_logic;
+      rst         : in  std_logic;
+      kb_clk_sync : in  std_logic;
+      edge_found  : out std_logic);
+  end component;
+
+  component scancode_reader
+    port (
+      clk             : in  std_logic;
+      rst             : in  std_logic;
+      edge_found      : in  std_logic;
+      serial_data     : in  std_logic;
+      valid_scan_code : out std_logic;
+      scancode_out    : out unsigned(7 downto 0));
+  end component;
+
+  component keyboard_buf
+    generic (
+      NUM_DIGITS : integer);
+    port (
+      clk          : in  std_logic;
+      reset        : in  std_logic;
+      valid_number : in  std_logic;
+      number       : in  std_logic_vector(3 downto 0);
+      bcd          : out std_logic_vector(NUM_DIGITS*4-1 downto 0));
+  end component;
+
+  component scancode_to_binary
+    port (
+      scan_code_in : in  unsigned(7 downto 0);
+      binary_out   : out unsigned(3 downto 0));
+  end component;
+
+  component bcd_to_bin
+    generic (
+      DIGIT_COUNT : integer := NUM_DIGITS);
+    port (
+      bcd    : in  std_logic_vector(DIGIT_COUNT*4-1 downto 0);
+      binary : out std_logic_vector(OUTPUT_WIDTH-1 downto 0));
+  end component;
+
+  --keyboard input
+  signal edge_found      : std_logic;
+  signal kb_clk_sync     : std_logic;
+  signal kb_data_sync    : std_logic;
+  signal serial_data     : std_logic;
+  signal valid_scan_code : std_logic;
+  signal scanode_out     : std_logic_vector(7 downto 0);
+  signal scan_to_bin_out : unsigned(3 downto 0);
+
+  --keyboard buffer
+  signal kb_buf_clr : std_logic;
+  signal kb_buf_out : std_logic_vector(NUM_DIGITS*4-1 downto 0);
+
+  signal kb_in_data : std_logic_vector(7 downto 0);
+  
+  
+begin  -- assigment4_top_arch
+
+  sync_keyboard_1 : sync_keyboard
+    port map (
+      clk          => clk,
+      kb_clk       => kb_clk,
+      kb_data      => kb_data,
+      kb_clk_sync  => kb_clk_sync,
+      kb_data_sync => kb_data_sync);
+
+  edge_detector_1 : edge_detector
+    port map (
+      clk         => clk,
+      rst         => rst,
+      kb_clk_sync => kb_clk_sync,
+      edge_found  => edge_found);
+
+  scancode_reader_1 : scancode_reader
+    port map (
+      clk             => clk,
+      rst             => rst,
+      edge_found      => edge_found,
+      kb_data_sync    => serial_data,
+      valid_scan_code => valid_scan_code,
+      scancode_out    => scancode_out);
+
+  scancode_to_binary_1 : scancode_to_binary
+    port map (
+      scancode_out    => scan_code_in,
+      scan_to_bin_out => binary_out);
+
+  keyboard_buf_1 : keyboard_buf
+    generic map (
+      NUM_DIGITS => NUM_DIGITS)
+    port map (
+      clk             => clk,
+      reset           => reset,
+      valid_scan_code => valid_number,
+      scan_to_bin_out => number,
+      kb_buf_out      => bcd,
+      --TODO buf_clr
+      );
+
+  bcd_to_bin_1 : bcd_to_bin
+    generic map (
+      DIGIT_COUNT  => DIGIT_COUNT,
+      OUTPUT_WIDTH => OUTPUT_WIDTH)
+    port map (
+      kb_buf_out => bcd,
+      leds => binary);
+
+
+end assigment4_top_arch;

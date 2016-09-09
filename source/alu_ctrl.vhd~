@@ -1,0 +1,194 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.operators.all;
+
+entity alu_ctrl is
+  port (clk             : in  std_logic;
+        reset           : in  std_logic;
+        valid_scan_code : in  std_logic;
+        scancode_in     : in  std_logic_vector(7 downto 0);
+        FN              : out std_logic_vector (3 downto 0);  -- ALU functions
+        kb_buf_clr      : out std_logic;  -- Keyboard buffer clearer
+        mem_addr        : out std_logic_vector (12 downto 0);
+        mem_wea         : out std_logic;  -- memory write enable
+        mem_wr_sel      : out std_logic;
+        reg_ctrl        : out std_logic_vector(1 downto 0);
+        reg_clr         : out std_logic;
+        reg_sel_src     : out std_logic
+        );
+end alu_ctrl;
+
+architecture behavioral of alu_ctrl is
+  type state_type is (init, a_inp, a_save, save_addr_incr, op_save, b_inp, b_save, final_addr_incr, a_load, b_load, op_load, incr_addr, b_addr_incr);
+  signal current_state, next_state : state_type;
+  
+    constant plus_op : std_logic_vector(7 downto 0) := X"79";  -- "+" on keypad
+  constant minus_op   : std_logic_vector(7 downto 0) := X"7B";  -- "-" on keypad
+  constant times_op   : std_logic_vector(7 downto 0) := X"7C";  -- "*" on keypad
+  constant mod_op     : std_logic_vector(7 downto 0) := X"3A";  -- "M"
+  constant sqrt_op    : std_logic_vector(7 downto 0) := X"1B";  -- "S"
+  constant enter      : std_logic_vector(7 downto 0) := X"5A";  -- "Enter" on keypad
+  constant arrow_up   : std_logic_vector(7 downto 0) := X"1C";  -- A
+  constant arrow_down : std_logic_vector(7 downto 0) := X"1A";  -- Z
+  constant escape     : std_logic_vector(7 downto 0) := X"76";  -- ESC
+  
+
+                                        -- signal last_sign, last_enter, last_sign_bit : std_logic; 
+                                                        function scancode_to_fn(scancode : std_logic_vector(7 downto 0)) return std_logic_vector is
+  begin
+    
+    case (scancode) is
+      when plus_op  => return OP_PLUS;
+      when minus_op => return OP_MINUS;
+      when times_op => return OP_TIMES;
+      when sqrt_op  => return OP_SQRT;
+      when mod_op   => return OP_MOD;
+      when others   => return "000";
+    end case;
+  end scancode_to_fn;
+
+-- SIGNAL DEFINITIONS HERE IF NEEDED
+  
+begin
+  --TODO: memory address assigment
+  synchronous : process (clk, reset)
+  begin  --  process  register
+    if (reset = '1') then               --  asynchronous  reset  (active  low)
+      current_state <= init;
+    elsif (clk'event and clk = '1') then  --  rising  clock  edge
+      current_state <= next_state;
+    end if;
+  end process;
+
+  logic : process (current_state, scancode_in)
+    
+
+
+    variable mem_rd_addr, mem_wr_addr : unsigned (12 downto 0);
+
+  begin
+    
+    next_state  <= current_state;
+    FN          <= (others => '0');
+    kb_buf_clr  <= '0';
+    mem_addr    <= (others => '0');
+    mem_wea     <= '0';
+    mem_wr_sel  <= '0';
+    reg_clr     <= '0';
+    reg_sel_src <= '0';
+    reg_ctrl    <= (others => '0');
+        mem_rd_addr := (others => '0');
+        mem_wr_addr := (others => '0');
+
+    case current_state is
+      
+      when init =>
+        next_state  <= a_inp;
+        mem_rd_addr := (others => '0');
+        mem_wr_addr := (others => '0');
+        reg_clr     <= '1';
+        
+      when a_inp =>
+        if (scancode_in = plus_op or scancode_in = minus_op or scancode_in = times_op or scancode_in = mod_op or scancode_in = sqrt_op) and valid_scan_code = '1' then
+          next_state <= a_save;
+        elsif (scancode_in = arrow_up) and valid_scan_code = '1' then
+          next_state  <= b_load;
+          mem_rd_addr := mem_wr_addr - 1;
+          reg_clr     <= '0';
+        end if;
+		reg_ctrl    <= "10";
+        
+      when a_save =>
+        next_state <= save_addr_incr;
+        mem_wea    <= '1';
+        mem_addr   <= std_logic_vector(mem_wr_addr);
+        FN         <= "0" & scancode_to_fn(scancode_in);
+		  reg_ctrl    <= "00";
+        
+      when save_addr_incr =>
+        next_state  <= op_save;
+        mem_wr_addr := mem_wr_addr + 1;
+        kb_buf_clr  <= '1';
+        mem_wr_sel  <= '1';
+        mem_wea     <= '0';
+        
+      when op_save =>
+        if scancode_in = mod_op or scancode_in = sqrt_op then
+          next_state <= b_addr_incr;
+        else
+          next_state <= b_inp;
+        end if;
+        mem_wea    <= '1';
+        kb_buf_clr <= '1'; 
+                                        -- without sign "0"
+        mem_addr   <= std_logic_vector(mem_wr_addr);
+        
+      when b_inp =>
+        if (scancode_in = enter) and valid_scan_code = '1' then
+          next_state <= b_addr_incr;
+        end if;
+        mem_wr_sel <= '0';
+        mem_wea    <= '0';
+		reg_ctrl    <= "11";
+        
+      when b_addr_incr =>
+        next_state  <= b_save;
+        mem_wr_addr := mem_wr_addr + 1;
+        
+      when b_save =>
+        next_state <= final_addr_incr;
+        mem_wea    <= '0';
+        mem_addr   <= std_logic_vector(mem_wr_addr);
+        reg_ctrl    <= "00";
+		
+      when final_addr_incr =>
+        next_state  <= a_inp;
+        mem_wr_addr := mem_wr_addr + 1;
+        reg_clr     <= '1';
+        
+      when b_load =>
+        if scancode_in = escape and valid_scan_code = '1' then
+          next_state <= a_inp;
+        elsif mem_rd_addr < 0 or mem_rd_addr > mem_wr_addr then
+          next_state <= b_load;
+        else
+          next_state <= op_load;
+        end if;
+        reg_sel_src <= '1';
+        reg_ctrl    <= "11";
+        mem_addr    <= std_logic_vector(mem_rd_addr);
+        reg_clr     <= '1';
+        
+      when op_load =>
+        next_state  <= a_load;
+        mem_rd_addr := mem_rd_addr - 1;
+        mem_addr    <= std_logic_vector(mem_rd_addr);
+        reg_ctrl    <= "01";
+        reg_clr     <= '0';
+        --what to do with the operator we read in? !!!!!!!!!!!!!!!! TO DO !!!!!!!!!!!!!!!!
+        
+      when a_load =>
+        if (scancode_in = arrow_up) and valid_scan_code = '1' then
+          next_state <= b_load;
+        elsif (scancode_in = arrow_down) and valid_scan_code = '1' then
+          next_state <= incr_addr;
+        elsif scancode_in = escape and valid_scan_code = '1' then
+          next_state <= a_inp;
+        end if;
+        mem_rd_addr := mem_rd_addr - 1;
+        mem_addr    <= std_logic_vector(mem_rd_addr);
+        reg_ctrl    <= "10";
+        
+      when incr_addr =>
+        next_state  <= b_load;
+        mem_rd_addr := mem_rd_addr + 6;
+        mem_addr    <= std_logic_vector(mem_rd_addr);
+        
+        
+      when others => null;
+                     
+    end case;
+  end process;
+
+end behavioral;
